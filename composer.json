@@ -5,5 +5,8 @@
     "psr-4": {
       "BrowserCreative\\NtlmBundle\\": ""
     }
+  },
+  "require": {
+    "ext-iconv": "*"
   }
 }
