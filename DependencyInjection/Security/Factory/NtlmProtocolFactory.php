@@ -16,19 +16,25 @@ class NtlmProtocolFactory implements SecurityFactoryInterface
             ->setDefinition($providerId,
                 new DefinitionDecorator('ntlm.security.authentication.provider.ntlmprotocol'))
                 ->replaceArgument(1, new Reference($userProviderId))
-                ->replaceArgument(2, $config['ntlm_addresses']);
+                ->replaceArgument(2, $config['target'])
+                ->replaceArgument(3, $config['server'])
+                ->replaceArgument(4, $config['domain'])
+                ->replaceArgument(5, $config['dns_server'])
+                ->replaceArgument(6, $config['dns_domain'])
+                ->replaceArgument(7, $config['redirect_to_login_form_on_failure'])
+                ->replaceArgument(8, $config['ntlm_addresses']);
 
         $listenerId = 'ntlm.security.authentication.listener.ntlmprotocol.' . $id;
         $container->setDefinition($listenerId,
-            new DefinitionDecorator('ntlm.security.authentication.listener.ntlmprotocol'))
-            ->addArgument($config['redirect_to_login_form_on_failure']);
+            new DefinitionDecorator('ntlm.security.authentication.listener.ntlmprotocol'));
+            //->addArgument($config['redirect_to_login_form_on_failure']);
 
-        # If the application does logout, add our handler to allow to log the user out of other apps, too
+        // If the application does logout, add our handler to allow to log the user out of other apps, too
         if ($container->hasDefinition('security.logout_listener.'.$id)) {
             $logoutListener = $container->getDefinition('security.logout_listener.'.$id);
             $addHandlerArguments = array(new Reference('ntlm.security.http.logout.' . $id));
 
-            # Don't add the handler again if it has already been added by another factory
+            // Don't add the handler again if it has already been added by another factory
             if (!in_array(array('addHandler', $addHandlerArguments),
                     $logoutListener->getMethodCalls())) {
 
@@ -55,8 +61,13 @@ class NtlmProtocolFactory implements SecurityFactoryInterface
     {
         $node
             ->children()
-                ->booleanNode('redirect_to_login_form_on_failure')->defaultValue(true)->end()
                 ->scalarNode('provider')->end()
+                ->scalarNode('target')->end()
+                ->scalarNode('server')->end()
+                ->scalarNode('domain')->end()
+                ->scalarNode('dns_server')->end()
+                ->scalarNode('dns_domain')->end()
+                ->booleanNode('redirect_to_login_form_on_failure')->defaultValue(true)->end()
                 ->arrayNode('ntlm_addresses')
                     ->useAttributeAsKey('key')
                     ->prototype('scalar')->end()

@@ -33,48 +33,48 @@ use Symfony\Component\EventDispatcher\EventDispatcherInterface;
  */
 class NtlmProtocolListener implements ListenerInterface
 {
-    
+
     /**
      *
      * @var SecurityContextInterface
      */
     protected $securityContext;
-    
+
     /**
      *
      * @var AuthenticationManagerInterface
      */
     protected $authenticationManager;
-    
+
     /**
      *
      * @var HttpUtils
      */
     protected $httpUtils;
-    
+
     /**
      *
      * @var LoggerInterface
      */
     protected $logger;
-    
+
     /**
      *
      * @var EventDispatcherInterface
      */
     protected $dispatcher;
-    
+
     /**
      * If true, will redirect to the login form
      *
      * @var boolean
      */
-    protected $redirectToFormLogin = false;
+    //protected $redirectToFormLogin = false;
 
     public function __construct(SecurityContextInterface $securityContext,
             AuthenticationManagerInterface $authenticationManager, HttpUtils $httpUtils,
-            LoggerInterface $logger = null, EventDispatcherInterface $dispatcher = null,
-            $redirectToFormLogin = true)
+            LoggerInterface $logger = null, EventDispatcherInterface $dispatcher = null
+            /*$redirectToFormLogin = true*/)
     {
 
         $this->securityContext = $securityContext;
@@ -82,37 +82,39 @@ class NtlmProtocolListener implements ListenerInterface
         $this->httpUtils = $httpUtils;
         $this->logger = $logger;
         $this->dispatcher = $dispatcher;
-        $this->redirectToFormLogin = $redirectToFormLogin;
+        //$this->redirectToFormLogin = $redirectToFormLogin;
     }
 
     /**
+     * @todo restructure to match more closely the code in DigestAuthenticationListener
+     *
      * @param GetResponseEvent $event
      * @return null
      */
-    public function handle(GetResponseEvent $event) 
+    public function handle(GetResponseEvent $event)
     {
-        # Don't try to authenticate again if the user already has been
+        // Don't try to authenticate again if the user already has been
         if ($this->securityContext->getToken()) {
             return;
         }
-        
+
         try {
-            // Authentication manager uses a list of AuthenticationProviderInterface instances 
+            // Authentication manager uses a list of AuthenticationProviderInterface instances
             // to authenticate a Token.
             $token = $this->authenticationManager->authenticate(new NtlmProtocolToken());
             $this->securityContext->setToken($token);
-            
-            # Notify listeners that the user has been logged in
+
+            // Notify listeners that the user has been logged in
             if ($this->dispatcher) {
                 $this->dispatcher->dispatch(SecurityEvents::INTERACTIVE_LOGIN,
                     new InteractiveLoginEvent($event->getRequest(), $token));
             }
-            
+
             if ($this->logger) {
                 $this->logger->debug(sprintf(
                     'NTLM user "%s" authenticated', $token->getUsername()));
             }
-            
+
         } catch (AuthenticationException $e) {
         }
     }

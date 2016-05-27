@@ -10,6 +10,12 @@
                  public="false">
             <argument type="service" id="service_container" />
             <argument /> <!-- user provider -->
+            <argument /> <!-- target -->
+            <argument /> <!-- server -->
+            <argument /> <!-- domain -->
+            <argument /> <!-- dnsServer -->
+            <argument /> <!-- dnsDomain -->
+            <argument /> <!-- redirectToFormLogin -->
             <argument /> <!-- trusted IP addresses -->
         </service>
 
@@ -31,10 +37,12 @@
             <argument type="service" id="service_container" />
             <argument /> <!-- user provider -->
         </service>
+
         <service id="ntlm.security.http.logout"
                  class="BrowserCreative\NtlmBundle\Security\Http\Logout\NtlmLogoutHandler"
                  public="false">
         </service>
+
         <service id="ntlm.securityController"
                  class="BrowserCreative\NtlmBundle\Controller\SecurityController"
                  public="true">

@@ -18,7 +18,7 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Component\Security\Core\User\UserProviderInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Security\Core\Exception\UsernameNotFoundException;
-use BrowserCreative\NtlmBundle\Ntlm\Lib;
+use BrowserCreative\NtlmBundle\Ntlm\Lib as Ntlm;
 
 use BrowserCreative\NtlmBundle\Security\Authentication\Token\NtlmProtocolToken;
 
@@ -27,31 +27,54 @@ use BrowserCreative\NtlmBundle\Security\Authentication\Token\NtlmProtocolToken;
  */
 class NtlmProtocolAuthenticationProvider implements AuthenticationProviderInterface
 {
-    /**
-     * @var ContainerInterface
-     */
+    /** @var ContainerInterface */
     protected $container;
 
-    /**
-     * @var UserProviderInterface
-     */
+    /** @var UserProviderInterface */
     protected $userProvider;
 
-    /**
-     * @var array
-     */
+    /** @var array */
     protected $trustedRemoteAddresses;
+
+    protected $target;
+    protected $server;
+    protected $domain;
+    protected $dnsServer;
+    protected $dnsDomain;
+
+    /** @var bool  */
+    protected $redirectToFormLogin = false;
 
     /**
      * @param ContainerInterface $container so we can get the request
      * @param UserProviderInterface $userProvider
-     * @param array $trustedRemoteAddresses
+     * @param $target
+     * @param $server
+     * @param $domain
+     * @param $dnsServer
+     * @param $dnsDomain
+     * @param bool $redirectToFormLogin when false, NTLM auth is enforced. When true, if ntlm auth fails, other aut providers can kick in
+     * @param array $trustedRemoteAddresses list of IP addresses allowed to authenticate. An empty array means 'let all in'
      */
-    public function __construct(ContainerInterface $container, UserProviderInterface $userProvider,
-        array $trustedRemoteAddresses)
+    public function __construct(
+        ContainerInterface $container,
+        UserProviderInterface $userProvider,
+        $target,
+        $server,
+        $domain,
+        $dnsServer,
+        $dnsDomain,
+        $redirectToFormLogin = true,
+        array $trustedRemoteAddresses = array())
     {
         $this->container = $container;
         $this->userProvider = $userProvider;
+        $this->target = $target;
+        $this->server = $server;
+        $this->domain = $domain;
+        $this->dnsServer = $dnsServer;
+        $this->dnsDomain = $dnsDomain;
+        $this->redirectToFormLogin = $redirectToFormLogin;
         $this->trustedRemoteAddresses = $trustedRemoteAddresses;
     }
 
@@ -66,7 +89,7 @@ class NtlmProtocolAuthenticationProvider implements AuthenticationProviderInterf
             $remoteIp = $_SERVER['REMOTE_ADDR'];
         }
 
-        $logger->info('Trying to authenticate NTLM Protocol provider: ' . $remoteIp);
+        $logger->info('NTLM Protocol Provider trying to authenticate: ' . $remoteIp);
 
         if (!$this->isRemoteAddressAuthorised($remoteIp)) {
             $logger->info('Remote address is not authorised for NTLM: ' . $remoteIp);
@@ -114,17 +137,27 @@ class NtlmProtocolAuthenticationProvider implements AuthenticationProviderInterf
         throw new AuthenticationException('The NTLM authentication failed');
     }
 
+    /**
+     * @return array
+     */
     public function checkNtlm()
     {
         $logger = $this->container->get('logger');
 
-        /// @todo should these get injected from fw config !!!
-        $username = $this->ntlm_prompt("testwebsite", "workgroup", "ie8tester", "testdomain.local", "mycomputer.local", '\BrowserCreative\NtlmBundle\Ntlm\Lib::get_ntlm_user_hash');
+        $username = $this->ntlmPrompt(
+            $this->target,
+            $this->domain,
+            $this->server,
+            $this->dnsDomain,
+            $this->dnsServer,
+            '\BrowserCreative\NtlmBundle\Ntlm\Lib::get_ntlm_user_hash'
+        );
 
         if (!$username) {
             $logger->info('NTLM auth failed');
             throw new AuthenticationException('The NTLM authentication failed');
         }
+
         $logger->info('NTLM auth successful: ' . $username);
         return $username;
     }
@@ -135,6 +168,19 @@ class NtlmProtocolAuthenticationProvider implements AuthenticationProviderInterf
         return in_array($remoteAddress, $this->trustedRemoteAddresses);
     }
 
+    /// @todo do we need to match using uppercase ?
+    public function isRemoteComputerAuthorised($computerName, $domainName)
+    {
+        if ($domainName == $this->domain) {
+            return true;
+        }
+
+        $logger = $this->container->get('logger');
+        $logger->info('Remote computer is not authorised for NTLM: ' . $domainName . '/' . $computerName);
+        return false;
+    }
+
+    /// @todo we should make the /login path flexible, ideally getting it from config
     public function isLoginFormBeingSubmitted()
     {
         if (($this->container->get('request')->getMethod() == "POST") &&
@@ -147,6 +193,7 @@ class NtlmProtocolAuthenticationProvider implements AuthenticationProviderInterf
 
     public function isUserAgentDesktopBrowser()
     {
+        /// @todo can we use Sf Request object instead ?
         if (!isset($_SERVER['HTTP_USER_AGENT'])) {
             return false;
         }
@@ -187,22 +234,23 @@ class NtlmProtocolAuthenticationProvider implements AuthenticationProviderInterf
      *
      * @todo use class constants or config vars for the name of the session vars '_ntlm_auth', '_ntlm_server_challenge'
      * @todo move this method to an EntryPoint class (see DigestAuthenticationEntryPoint)
+     * @todo use a class member to hold the auth failed msg
      *
      * Docs describing the NTML auth scheme implemented by MS browsers, servers and proxies:
      * https://www.innovation.ch/personal/ronald/ntlm.html
      * https://blogs.msdn.microsoft.com/chiranth/2013/09/20/ntlm-want-to-know-how-it-works/
      *
-     * @param $targetName
-     * @param $domain
-     * @param $computer
-     * @param $dnsDomain
-     * @param $dnsComputer
+     * @param $targetName the name of the target to authenticate against
+     * @param string $domain e.g. 'DOMAIN'
+     * @param string $server name of the server e.g. 'SERVER'
+     * @param string $dnsDomain e.g. 'domain.com'
+     * @param string $dnsServer e.g. 'server.domain.com'
      * @param $get_ntlm_user_hash_callback
      * @param string $ntlm_verify_hash_callback
      * @param string $failMsg
      * @return array|null
      */
-    protected function ntlm_prompt($targetName, $domain, $computer, $dnsDomain, $dnsComputer, $get_ntlm_user_hash_callback, $ntlm_verify_hash_callback = '\BrowserCreative\NtlmBundle\Ntlm\Lib::verify_hash', $failMsg = "<h1>Authentication Required</h1>")
+    protected function ntlmPrompt($targetName, $domain, $server, $dnsDomain, $dnsServer, $get_ntlm_user_hash_callback, $ntlm_verify_hash_callback = '\BrowserCreative\NtlmBundle\Ntlm\Lib::verify_hash', $failMsg = "<h1>Authentication Required</h1>")
     {
         if (isset($_SESSION['_ntlm_auth']))
             return $_SESSION['_ntlm_auth'];
@@ -235,23 +283,31 @@ class NtlmProtocolAuthenticationProvider implements AuthenticationProviderInterf
                 throw new AuthenticationException('NTLM error header not recognised');
             }
             if ($msg[8] == "\x01") {
+                $data = Ntlm::parse_negotiate_msg($msg);
+                if (!$this->isRemoteComputerAuthorised($data['domain'], $data['workstation'])) {
+                    return;
+                }
+
                 $session = $this->container->get('session');
-                $session->set('_ntlm_server_challenge', Lib::get_random_bytes(8));
-                //$_SESSION['_ntlm_server_challenge'] = Lib::get_random_bytes(8);
+                $challenge = Ntlm::get_random_bytes(8);
+                $session->set('_ntlm_server_challenge', $challenge);
+
+                /// @todo allow validation of workstation/domain received from the client
+                $msg2 = Ntlm::get_challenge_msg($challenge, $targetName, $domain, $server, $dnsDomain, $dnsServer);
+                //$_SESSION['_ntlm_server_challenge'] = Ntlm::get_random_bytes(8);
                 header('HTTP/1.1 401 Unauthorized');
-                $msg2 = Lib::get_challenge_msg($msg, $session->get('_ntlm_server_challenge'), $targetName, $domain, $computer, $dnsDomain, $dnsComputer);
                 header('WWW-Authenticate: NTLM '.trim(base64_encode($msg2)));
                 //print bin2hex($msg2);
                 exit;
             } else if ($msg[8] == "\x03") {
                 $session = $this->container->get('session');
 
-                $auth = Lib::parse_response_msg($msg, $session->get('_ntlm_server_challenge'), $get_ntlm_user_hash_callback, $ntlm_verify_hash_callback);
+                $auth = Ntlm::verify_authenticate_msg($msg, $session->get('_ntlm_server_challenge'), $get_ntlm_user_hash_callback, $ntlm_verify_hash_callback);
                 $session->remove('_ntlm_server_challenge');
                 //unset($_SESSION['_ntlm_server_challenge']);
 
                 /// @todo in this case the user browser sent us auth headers which are not deemed valid.
-                ///       Should we always die, or maybe allow the user (via config) to get through to the next auth provider / login form?
+                ///       We should honour $this->redirectToFormLogin
                 if (!$auth['authenticated']) {
                     header('HTTP/1.1 401 Unauthorized');
                     header('WWW-Authenticate: NTLM');
