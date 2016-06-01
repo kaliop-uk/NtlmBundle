@@ -38,6 +38,8 @@ Roughly in order of importance:
     - IE intranet zone: ok for chrome, ie, edge
     - about:config for FF (but could not make it work so far)
 
+- document / code a user provider which retrieves the user provider via ldap (take code from kaliop id mgmt bundle)
+
 - check dead code and remove it if not used:
     * form login
     * custom triggering of login event ?

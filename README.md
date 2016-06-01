@@ -80,9 +80,3 @@ Installation
 When set, they will be matched against the user-agent string from the browser:
 - any mobile browser will not use NTLM auth (i.e. a blacklist)
 - only desktop browsers will use NTLM auth (i.e. a whitelist; not setting it means 'all except the mobile ones')
-
-Notes
-=====
-* The two authentication providers (NtlmProtocolAuthenticationProvider, NtlmFormLoginAuthenticationProvider) pass 
-tokens to the user provider instead of the username. Feel free to change this back, it's just that our User Providers 
-require the tokens because they rely on the password to access the database (LDAP)
