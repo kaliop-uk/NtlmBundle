@@ -9,9 +9,12 @@ your user provider/chain user providers
 Requirements
 ============
 
-* Symfony 2.0.x
+* Symfony > 2.0
 
-* A way to retrieve the password of a user given his/her username (eg. a Samba user db installed on the webserver)
+* A way to retrieve the password of a user given his/her username, eg.
+    - a Samba installation with the user db installed on the webserver
+    - direct access to the user accounts database (with usernames and passwords)
+    - a Samba installation which can communicate to the AD server to validate user credentials 
 
 Installation
 ============
@@ -45,9 +48,15 @@ Installation
                 secured_area:
                     pattern: ^/
                     ntlm_protocol:
-                        provider: chain_provider
+                        target: <the auth target name>
+                        domain: <auth domain. ex: ADDOMAIN>
+                        server: <auth server. ex: INTRANET>
+                        dns_domain: <auth domain fqdn. ex: addomain.local>
+                        dns_server: <auth server fqdn. ex: intranet.addomain.local>
                         redirect_to_login_form_on_failure: true
                         ntlm_addresses: [ ...list of ip addresses authorized to do NTLM auth... ]
+                        
+                        token_validator: "the service id of a token validator"
                     ntlm_form_login:
                         provider: chain_provider
                         remember_me_parameter: _remember_me
@@ -56,7 +65,9 @@ Installation
             
             ...
 
-4. Optional: set the following 2 parameters:
+4. Set up the token validator used in the security.yml definition: ...
+
+5. Optional: set the following 2 parameters:
 
         parameters:
             browser_detection.mobile: 'regexp...'

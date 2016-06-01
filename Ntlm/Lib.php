@@ -54,11 +54,12 @@ THE SOFTWARE.
  * 6: C <--  S   200 Ok
  *
  * @todo move all methods to be non-static
- * @todo add separate methods for parsing the client responses
  */
 class Lib
 {
-    protected $ntlm_verifyntlmpath = '/sbin/verifyntlm';
+    const MSG_TYPE_NEGOTIATE = "\x01";
+    const MSG_TYPE_CHALLENGE = "\x02";
+    const MSG_TYPE_AUTENTICATE = "\x03";
 
     /**
      * @param string $str
@@ -121,6 +122,41 @@ class Lib
     }
 
     /**
+     * Parses auth headers received by the Client
+     * @param string $auth_header
+     * @return array keys: message, type
+     * @throws \Exception
+     */
+    public static function parse_auth_header($auth_header) {
+        if (substr($auth_header,0,5) == 'NTLM ') {
+            $msg = base64_decode(substr($auth_header, 5));
+            if (substr($msg, 0, 8) != "NTLMSSP\x00") {
+                //unset($_SESSION['_ntlm_post_data']);
+                throw new \Exception('NTLM error header not recognised');
+            }
+            if ($msg[8] == static::MSG_TYPE_AUTENTICATE || $msg[8] == static::MSG_TYPE_NEGOTIATE) {
+                return array(
+                    'message' => $msg,
+                    'type' => $msg[8]
+                );
+            }
+        } else {
+            throw new \Exception('Auth headers is not NTLM');
+        }
+    }
+
+    /**
+     * @param string $msg
+     * @return string the header value to be used in an 'WWW-Authenticate' header
+     */
+    public static function get_auth_header_value($msg='') {
+        if ($msg == '') {
+            return 'NTLM';
+        }
+        return 'NTLM '.trim(base64_encode($msg));
+    }
+
+    /**
      * Generates a sequence of random bytes
      * @todo use crypto-safe random function
      * @param int $length
@@ -150,23 +186,18 @@ class Lib
     /**
      * Generates the 'challenge message' to be sent back to the client in step 4
      *
-     * @param string $challenge a *random* 8-byte string
-     * @param string $targetname
-     * @param string $domain e.g. 'DOMAIN'
-     * @param string $server name of the server e.g. 'SERVER'
-     * @param string $dnsdomain e.g. 'domain.com'
-     * @param string $dnsserver e.g. 'server.domain.com'
+     * @param ChallengeData $challengeData
      * @return string
      */
-    public static function get_challenge_msg(/*$msg,*/ $challenge, $targetname, $domain, $server, $dnsdomain, $dnsserver) {
+    public static function get_challenge_msg(ChallengeData $challengeData) {
         /*$domain = static::field_value($msg, 16);
         $workstation = static::field_value($msg, 24);*/
-        $tdata = static::av_pair(2, static::utf8_to_utf16le($domain)).static::av_pair(1, static::utf8_to_utf16le($server)).static::av_pair(4, static::utf8_to_utf16le($dnsdomain)).static::av_pair(3, static::utf8_to_utf16le($dnsserver))."\0\0\0\0\0\0\0\0";
-        $tname = static::utf8_to_utf16le($targetname);
+        $tdata = static::av_pair(2, static::utf8_to_utf16le($challengeData->domain)).static::av_pair(1, static::utf8_to_utf16le($challengeData->server)).static::av_pair(4, static::utf8_to_utf16le($challengeData->dnsdomain)).static::av_pair(3, static::utf8_to_utf16le($challengeData->dnsserver))."\0\0\0\0\0\0\0\0";
+        $tname = static::utf8_to_utf16le($challengeData->targetname);
         $msg2 = "NTLMSSP\x00\x02\x00\x00\x00".
             pack('vvV', strlen($tname), strlen($tname), 48). // target name len/alloc/offset
             "\x01\x02\x81\x00". // flags
-            $challenge. // challenge
+            $challengeData->challenge. // challenge
             "\x00\x00\x00\x00\x00\x00\x00\x00". // context
             pack('vvV', strlen($tdata), strlen($tdata), 48 + strlen($tname)). // target info len/alloc/offset
             $tname.$tdata;
@@ -174,51 +205,16 @@ class Lib
     }
 
     /**
-     * Example callback: generate the ntlm password hash of a user account
-     */
-    static function get_ntlm_user_hash($user) {
-        $userdb = array('admin'=>'admin');
-        if (!isset($userdb[strtolower($user)]))
-            return false;
-        $pwd = $userdb[strtolower($user)];
-
-        return static::md4(static::utf8_to_utf16le($pwd));
-    }
-
-    /**
-     * Example callback: get the password hash of a user via invocation of a C program based on having a local Samba user db
-     */
-    static function verify_hash_smb($challenge, $user, $domain, $workstation, $clientblobhash, $clientblob, $get_ntlm_user_hash_callback) {
-        $cmd = bin2hex($challenge)." ".bin2hex(static::utf8_to_utf16le(strtoupper($user)))." ".bin2hex(static::utf8_to_utf16le($domain))." ".bin2hex(static::utf8_to_utf16le($workstation))." ".bin2hex($clientblobhash)." ".bin2hex($clientblob);
-        return (shell_exec(self::$ntlm_verifyntlmpath . " $cmd") == "1\n");
-    }
-
-    /**
-     * Example callback
+     * Parses the NTLM authenticate message received from the Client in step 5
+     * @param string $msg
+     * @return array
+     * @throws \Exception
      *
+     * @todo use a structured class instead of an array as return type
      */
-    static function verify_hash($challenge, $user, $domain, $workstation, $clientblobhash, $clientblob, $get_ntlm_user_hash_callback) {
-        $md4hash = call_user_func_array($get_ntlm_user_hash_callback, array($user));
-        if (!$md4hash)
-            return false;
-        $ntlmv2hash = static::hmac_md5($md4hash, static::utf8_to_utf16le(strtoupper($user).$domain));
-        $blobhash = static::hmac_md5($ntlmv2hash, $challenge.$clientblob);
-
-        /*
-        print $domain ."<br>";
-        print $user ."<br>";
-        print bin2hex($challenge )."<br>";
-        print bin2hex($clientblob )."<br>";
-        print bin2hex($clientblobhash )."<br>";
-        print bin2hex($md4hash )."<br>";
-        print bin2hex($ntlmv2hash)."<br>";
-        print bin2hex($blobhash)."<br>"; die; */
-        return ($blobhash == $clientblobhash);
-    }
-
     public static function parse_authenticate_msg($msg) {
         $ntlmresponse = static::field_value($msg, 20, false);
-        return array(
+        $data = array(
             'user' => static::field_value($msg, 36),
             'domain' => static::field_value($msg, 28),
             'workstation' => static::field_value($msg, 44),
@@ -227,32 +223,69 @@ class Lib
             'clientblob' => substr($ntlmresponse, 16),
             'clientblobhash' => substr($ntlmresponse, 0, 16),
         );
+
+        if (substr($data['clientblob'], 0, 8) != "\x01\x01\x00\x00\x00\x00\x00\x00") {
+            throw new \Exception('NTLMv2 response required. Please force your client to use NTLMv2.');
+        }
+
+        return $data;
     }
 
     /**
+     * NB: logic moved to auth provider + token validator
+     *
      * Verifies the message received from the Client in step 5
      *
-     * @todo move to passing in here a single callback?
-     *
-     * @param string $msg the 1st NTLM message sent from the Client
+     * @param array $data the parsed data gotten from the NTLM authenticate message sent from the Client (see parse_authenticate_msg)
      * @param string $challenge the sequence of random bytes which was used to generate the challenge
-     * @param callable $get_ntlm_user_hash_callback Given the username $user, retrieve his/her password, and return it in ntlm_user_hash format
-     *                                              params: $user; return string|false
      * @param callable $ntlm_verify_hash_callback Check that the ntlm hash received from the browser corresponds to the one calculated for the local user
-     *                                            params: $challenge, $user, $domain, $workstation, $clientblobhash, $clientblob, $get_ntlm_user_hash_callback; returns bool
+     *                                            params: $challenge, $data; return: bool
      * @return array
+     * @throws \Exception
      */
-    public static function verify_authenticate_msg($msg, $challenge, $get_ntlm_user_hash_callback, $ntlm_verify_hash_callback) {
-        $data = static::parse_authenticate_msg($msg);
-        if (substr($data['clientblob'], 0, 8) != "\x01\x01\x00\x00\x00\x00\x00\x00") {
-            return array('authenticated' => false, 'error' => 'NTLMv2 response required. Please force your client to use NTLMv2.');
-        }
-
-        // print bin2hex($msg)."<br>";
-
-        $authenticated = call_user_func_array($ntlm_verify_hash_callback, array($challenge, $data['user'], $data['domain'], $data['workstation'], $data['clientblobhash'], $data['clientblob'], $get_ntlm_user_hash_callback));
+    /*public static function verify_authenticate_msg($challenge, $data, $ntlm_verify_hash_callback) {
+        $authenticated = call_user_func_array($ntlm_verify_hash_callback, array($challenge, $data));
         if (!$authenticated)
             return array('authenticated' => false, 'error' => 'Incorrect username or password.', 'username' => $data['user'], 'domain' => $data['domain'], 'workstation' => $data['workstation']);
         return array('authenticated' => true, 'username' => $data['user'], 'domain' => $data['domain'], 'workstation' => $data['workstation']);
+    }*/
+
+    /* *** example callbacks *** */
+    /// @todo move to token validators
+
+    /**
+     * Example callback: get the password hash of a user via invocation of a C program based on having a local Samba user db
+     */
+    private static function verify_hash_smb($challenge, $data) {
+        $cmd = bin2hex($challenge)." ".bin2hex(static::utf8_to_utf16le(strtoupper($data['user'])))." ".
+            bin2hex(static::utf8_to_utf16le($data['domain']))." ".bin2hex(static::utf8_to_utf16le($data['workstation'])).
+            " ".bin2hex($data['clientblobhash'])." ".bin2hex($data['clientblob']);
+        return (shell_exec("/sbin/verifyntlm " . $cmd) == "1\n");
     }
+
+    /**
+     * Example callback - for when we have access to the database of users and passwords
+     */
+    private static function verify_hash($challenge, $data) {
+        $md4hash = static::get_ntlm_user_hash($data['user']);
+        if (!$md4hash)
+            return false;
+        $ntlmv2hash = static::hmac_md5($md4hash, static::utf8_to_utf16le(strtoupper($data['user']).$data['domain']));
+        $blobhash = static::hmac_md5($ntlmv2hash, $challenge.$data['clientblob']);
+
+        return ($blobhash == $data['clientblobhash']);
+    }
+
+    /**
+     * Subroutine for the example callback: generate the ntlm password hash of a user account
+     */
+    private static function get_ntlm_user_hash($user) {
+        $userdb = array('admin'=>'admin');
+        if (!isset($userdb[strtolower($user)]))
+            return false;
+        $pwd = $userdb[strtolower($user)];
+
+        return static::md4(static::utf8_to_utf16le($pwd));
+    }
+
 }

@@ -1,5 +1,7 @@
 <?php
 
+/// @todo review/remove
+
 namespace BrowserCreative\NtlmBundle\Security\Authentication\Token;
 
 use Symfony\Component\Security\Core\Authentication\Token\UsernamePasswordToken;

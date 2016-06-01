@@ -1,5 +1,7 @@
 <?php
 
+/// @todo review/remove
+
 /**
  * Contains the NtlmFormLoginAuthenticationProvider class
  *
@@ -23,6 +25,8 @@ use BrowserCreative\NtlmBundle\Security\User\User;
 use BrowserCreative\NtlmBundle\Security\Authentication\Token\NtlmProtocolUsernamePasswordToken;
 
 /**
+ * @todo evaluate the features added by this class... maybe replace with a user provider based on LDAP fetching
+ *
  * @package    BrowserCreative\NtlmBundle
  * @subpackage Security\Authentication\Provider
  * @author     Miquel Rodríguez Telep / Michael Rodríguez-Torrent <mike@themikecam.com>

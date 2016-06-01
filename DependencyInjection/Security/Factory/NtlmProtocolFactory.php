@@ -9,25 +9,42 @@ use Symfony\Bundle\SecurityBundle\DependencyInjection\Security\Factory\SecurityF
 
 class NtlmProtocolFactory implements SecurityFactoryInterface
 {
-    public function create(ContainerBuilder $container, $id, $config, $userProviderId, $defaultEntryPoint)
+    public function create(ContainerBuilder $container, $id, $config, $userProvider, $defaultEntryPoint)
     {
-        $providerId = 'ntlm.security.authentication.provider.ntlmprotocol.' . $id;
+        // provider
+        $providerId = 'ntlm.security.authentication.provider.ntlm_flexy.'.$id;
         $container
-            ->setDefinition($providerId,
-                new DefinitionDecorator('ntlm.security.authentication.provider.ntlmprotocol'))
-                ->replaceArgument(1, new Reference($userProviderId))
-                ->replaceArgument(2, $config['target'])
-                ->replaceArgument(3, $config['server'])
-                ->replaceArgument(4, $config['domain'])
-                ->replaceArgument(5, $config['dns_server'])
-                ->replaceArgument(6, $config['dns_domain'])
-                ->replaceArgument(7, $config['redirect_to_login_form_on_failure'])
-                ->replaceArgument(8, $config['ntlm_addresses']);
+            ->setDefinition($providerId, new DefinitionDecorator('ntlm.security.authentication.provider.ntlm_flexy'))
+            ->replaceArgument(0, new Reference($userProvider))
+            ->replaceArgument(1, new Reference($config['token_validator']))
+            ->replaceArgument(2, $id)
+        ;
 
+        // entry point
+        if (null === $defaultEntryPoint) {
+            $entryPointId = 'ntlm.security.authentication.ntlm_entry_point.' . $id;
+            $container
+                ->setDefinition($entryPointId,
+                    new DefinitionDecorator('ntlm.security.authentication.ntlm_entry_point'))
+                ->replaceArgument(1, $config['target'])
+                ->replaceArgument(2, $config['server'])
+                ->replaceArgument(3, $config['domain'])
+                ->replaceArgument(4, $config['dns_server'])
+                ->replaceArgument(5, $config['dns_domain'])
+                ->replaceArgument(6, $config['ntlm_addresses'])
+                ->replaceArgument(7, $config['redirect_to_login_form_on_failure'])
+            ;
+            $defaultEntryPoint = $entryPointId;
+        }
+
+        // listener
         $listenerId = 'ntlm.security.authentication.listener.ntlmprotocol.' . $id;
         $container->setDefinition($listenerId,
-            new DefinitionDecorator('ntlm.security.authentication.listener.ntlmprotocol'));
-            //->addArgument($config['redirect_to_login_form_on_failure']);
+            new DefinitionDecorator('ntlm.security.authentication.listener.ntlmprotocol'))
+            ->replaceArgument(1, new Reference($defaultEntryPoint))
+            ->replaceArgument(2, new Reference($providerId))
+            ->replaceArgument(3, $id)
+            ;
 
         // If the application does logout, add our handler to allow to log the user out of other apps, too
         if ($container->hasDefinition('security.logout_listener.'.$id)) {
@@ -47,6 +64,7 @@ class NtlmProtocolFactory implements SecurityFactoryInterface
         return array($providerId, $listenerId, $defaultEntryPoint);
     }
 
+    /// @todo verify: is this position correct, or shall it be moved to 'http' ?
     public function getPosition()
     {
         return 'remember_me';
@@ -61,7 +79,6 @@ class NtlmProtocolFactory implements SecurityFactoryInterface
     {
         $node
             ->children()
-                ->scalarNode('provider')->end()
                 ->scalarNode('target')->end()
                 ->scalarNode('server')->end()
                 ->scalarNode('domain')->end()
@@ -71,6 +88,8 @@ class NtlmProtocolFactory implements SecurityFactoryInterface
                 ->arrayNode('ntlm_addresses')
                     ->useAttributeAsKey('key')
                     ->prototype('scalar')->end()
+                ->end()
+                ->scalarNode('token_validator')->end()
             ->end()
         ;
     }

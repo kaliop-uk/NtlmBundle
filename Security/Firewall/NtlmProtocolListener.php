@@ -11,17 +11,18 @@
 
 namespace BrowserCreative\NtlmBundle\Security\Firewall;
 
-use BrowserCreative\NtlmBundle\Security\Authentication\Token\NtlmProtocolToken;
+use BrowserCreative\NtlmBundle\Security\Authentication\Token\NtlmToken;
 use Symfony\Component\HttpKernel\Event\GetResponseEvent;
-use Symfony\Component\HttpKernel\Log\LoggerInterface;
-use Symfony\Component\Security\Core\Authentication\AuthenticationManagerInterface;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\Security\Core\Exception\AuthenticationException;
-use Symfony\Component\Security\Core\SecurityContextInterface;
+use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorageInterface;
 use Symfony\Component\Security\Http\Firewall\ListenerInterface;
-use Symfony\Component\Security\Http\HttpUtils;
+use Symfony\Component\EventDispatcher\EventDispatcherInterface;
+use Symfony\Component\Security\Http\EntryPoint\AuthenticationEntryPointInterface;
+use Symfony\Component\Security\Core\Authentication\Provider\AuthenticationProviderInterface;
 use Symfony\Component\Security\Http\Event\InteractiveLoginEvent;
 use Symfony\Component\Security\Http\SecurityEvents;
-use Symfony\Component\EventDispatcher\EventDispatcherInterface;
+use Symfony\Component\Security\Core\Exception\UsernameNotFoundException;
 
 /**
  * NtlmProtocolListener checks whether the user has been authenticated against the NTLM protocol
@@ -30,27 +31,27 @@ use Symfony\Component\EventDispatcher\EventDispatcherInterface;
  * @author     Ka Yue Yeung
  * @package    BrowserCreative\NtlmBundle
  * @subpackage Security\Firewall
+ *
+ * @todo rename to NtlmAuthenticationListener
  */
 class NtlmProtocolListener implements ListenerInterface
 {
 
     /**
      *
-     * @var SecurityContextInterface
+     * @var tokenStorageInterface
      */
-    protected $securityContext;
+    protected $tokenStorage;
 
     /**
      *
-     * @var AuthenticationManagerInterface
+     * @var AuthenticationEntryPointInterface
      */
-    protected $authenticationManager;
+    protected $authenticationEntryPoint;
 
-    /**
-     *
-     * @var HttpUtils
-     */
-    protected $httpUtils;
+    protected $authProvider;
+
+    protected $providerKey;
 
     /**
      *
@@ -71,22 +72,24 @@ class NtlmProtocolListener implements ListenerInterface
      */
     //protected $redirectToFormLogin = false;
 
-    public function __construct(SecurityContextInterface $securityContext,
-            AuthenticationManagerInterface $authenticationManager, HttpUtils $httpUtils,
+    public function __construct(TokenStorageInterface $tokenStorage,
+            AuthenticationEntryPointInterface $authenticationEntryPoint,
+            AuthenticationProviderInterface $authProvider, $providerKey,
             LoggerInterface $logger = null, EventDispatcherInterface $dispatcher = null
-            /*$redirectToFormLogin = true*/)
+        )
     {
-
-        $this->securityContext = $securityContext;
-        $this->authenticationManager = $authenticationManager;
-        $this->httpUtils = $httpUtils;
+        $this->tokenStorage = $tokenStorage;
+        $this->authenticationEntryPoint = $authenticationEntryPoint;
+        $this->authProvider = $authProvider;
+        $this->providerKey = $providerKey;
         $this->logger = $logger;
         $this->dispatcher = $dispatcher;
-        //$this->redirectToFormLogin = $redirectToFormLogin;
     }
 
     /**
-     * @todo restructure to match more closely the code in DigestAuthenticationListener
+     * @todo restructure to match more closely the code in DigestAuthenticationListener:
+     *       - use $event->setResponse to send back responses
+     *       - use an authenticationEntryPoint class instead of the authenticationManager one
      *
      * @param GetResponseEvent $event
      * @return null
@@ -94,25 +97,37 @@ class NtlmProtocolListener implements ListenerInterface
     public function handle(GetResponseEvent $event)
     {
         // Don't try to authenticate again if the user already has been
-        if ($this->securityContext->getToken()) {
+        /// @todo should we check that the token is authenticated before returning?
+        if ($this->tokenStorage->getToken()) {
             return;
         }
 
         try {
-            // Authentication manager uses a list of AuthenticationProviderInterface instances
-            // to authenticate a Token.
-            $token = $this->authenticationManager->authenticate(new NtlmProtocolToken());
-            $this->securityContext->setToken($token);
+            $response = $this->authenticationEntryPoint->start($event->getRequest());
 
-            // Notify listeners that the user has been logged in
-            if ($this->dispatcher) {
-                $this->dispatcher->dispatch(SecurityEvents::INTERACTIVE_LOGIN,
-                    new InteractiveLoginEvent($event->getRequest(), $token));
+            /// @todo check for a Response object, not just any object
+            if (is_object($response)) {
+                $event->setResponse($response);
+                return;
             }
 
-            if ($this->logger) {
-                $this->logger->debug(sprintf(
-                    'NTLM user "%s" authenticated', $token->getUsername()));
+            $token = new NtlmToken($response['response']['user'], $response, $this->providerKey);
+
+            // the auth provider does both validate the NTLM response and load the Sf user
+            if ($authenticatedToken = $this->authProvider->authenticate($token)) {
+                $this->tokenStorage->setToken($authenticatedToken);
+
+                // Notify listeners that the user has been logged in
+                /// @todo is this necessary? f.e. DigestAuthenticationListener does not do it...
+                /*if ($this->dispatcher) {
+                    $this->dispatcher->dispatch(SecurityEvents::INTERACTIVE_LOGIN,
+                        new InteractiveLoginEvent($event->getRequest(), $token));
+                }*/
+
+                if ($this->logger) {
+                    $this->logger->debug(sprintf(
+                        'NTLM user "%s" authenticated', $token->getUsername()));
+                }
             }
 
         } catch (AuthenticationException $e) {

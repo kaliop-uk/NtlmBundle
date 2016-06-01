@@ -4,31 +4,63 @@
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xsi:schemaLocation="http://symfony.com/schema/dic/services http://symfony.com/schema/dic/services/services-1.0.xsd">
 
+    <parameters>
+        <parameter key="security.authentication.provider.ntlm_flexy.class">BrowserCreative\NtlmBundle\Security\Authentication\Provider\NtlmFlexiAuthenticationProvider</parameter>
+        <parameter key="security.authentication.listener.ntlmprotocol.class">BrowserCreative\NtlmBundle\Security\Firewall\NtlmProtocolListener</parameter>
+        <parameter key="security.authentication.listener.ntlm_entry_point.class">BrowserCreative\NtlmBundle\Security\Http\EntryPoint\NtlmAuthenticationEntryPoint</parameter>
+        <parameter key="security.authentication.token_validator.smbhelper.class">BrowserCreative\NtlmBundle\Ntlm\SmbHelperTokenValidator</parameter>
+    </parameters>
+
     <services>
-        <service id="ntlm.security.authentication.provider.ntlmprotocol"
-                 class="BrowserCreative\NtlmBundle\Security\Authentication\Provider\NtlmProtocolAuthenticationProvider"
+        <service id="ntlm.security.authentication.provider.ntlm_flexy"
+                 class="%security.authentication.provider.ntlm_flexy.class%"
+                 public="false">
+            <argument /> <!-- user provider -->
+            <argument /> <!-- token validator -->
+            <argument /> <!-- key -->
+            <!--<call method="setLogger">
+                <argument type="service" id="logger" />
+            </call>
+            <tag name="monolog.logger" channel="security" />-->
+        </service>
+
+        <service id="ntlm.security.authentication.ntlm_entry_point"
+                 class="%security.authentication.listener.ntlm_entry_point.class%"
                  public="false">
             <argument type="service" id="service_container" />
-            <argument /> <!-- user provider -->
             <argument /> <!-- target -->
             <argument /> <!-- server -->
             <argument /> <!-- domain -->
             <argument /> <!-- dnsServer -->
             <argument /> <!-- dnsDomain -->
-            <argument /> <!-- redirectToFormLogin -->
             <argument /> <!-- trusted IP addresses -->
+            <argument /> <!-- redirectToFormLogin -->
+            <call method="setLogger">
+                <argument type="service" id="logger" />
+            </call>
+            <tag name="monolog.logger" channel="security" />
         </service>
 
         <service id="ntlm.security.authentication.listener.ntlmprotocol"
-                 class="BrowserCreative\NtlmBundle\Security\Firewall\NtlmProtocolListener"
+                 class="%security.authentication.listener.ntlmprotocol.class%"
                  public="false">
-            <tag name="monolog.logger" channel="security" />
-            <argument type="service" id="security.context" />
-            <argument type="service" id="security.authentication.manager" />
-            <argument type="service" id="security.http_utils" />
+            <argument type="service" id="security.token_storage" />
+            <argument/> <!-- Entry Point -->
+            <argument/> <!-- Auth provider -->
+            <argument/> <!-- provider key -->
             <argument type="service" id="logger" on-invalid="null" />
             <argument type="service" id="event_dispatcher" on-invalid="null"/>
+            <tag name="monolog.logger" channel="security" />
         </service>
+
+        <service id="ntlm.security.authentication.token_validator.smbhelper"
+                 class="%security.authentication.token_validator.smbhelper.class%"
+                 public="false">
+            <!--<argument type="service" id="logger" on-invalid="null" />
+            <tag name="monolog.logger" channel="security" />-->
+        </service>
+
+        <!-- below: to be reviewed... -->
 
         <service id="ntlm.security.authentication.provider.login"
                  class="BrowserCreative\NtlmBundle\Security\Authentication\Provider\NtlmFormLoginAuthenticationProvider"

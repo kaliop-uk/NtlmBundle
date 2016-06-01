@@ -1,4 +1,7 @@
 <?php
+
+/// @todo review/remove
+
 namespace BrowserCreative\NtlmBundle\DependencyInjection\Security\Factory;
 
 use Symfony\Bundle\SecurityBundle\DependencyInjection\Security\Factory\FormLoginFactory;
@@ -21,11 +24,11 @@ class NtlmFormLoginFactory extends FormLoginFactory
         if ($container->hasDefinition('security.logout_listener.'.$id)) {
             $logoutListener = $container->getDefinition('security.logout_listener.'.$id);
             $addHandlerArguments = array(new Reference('ntlm.security.http.logout.' . $id));
-            
+
             // Don't add the handler again if it has already been added by another factory
             if (!in_array(array('addHandler', $addHandlerArguments),
                     $logoutListener->getMethodCalls())) {
-                
+
                 $container->setDefinition('ntlm.security.http.logout.' . $id,
                             new DefinitionDecorator('ntlm.security.http.logout'));
                 $logoutListener->addMethodCall('addHandler', $addHandlerArguments);
@@ -34,16 +37,16 @@ class NtlmFormLoginFactory extends FormLoginFactory
 
         return $providerId;
     }
-    
+
     protected function isRememberMeAware($config)
-    {   
+    {
         return false;
     }
 
     public function addConfiguration(NodeDefinition $node)
     {
         parent::addConfiguration($node);
-        
+
         $node
             ->children()
                 ->scalarNode('remember_me_parameter')

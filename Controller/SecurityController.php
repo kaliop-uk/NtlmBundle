@@ -1,5 +1,7 @@
 <?php
 
+/// @todo review/remove
+
 namespace BrowserCreative\NtlmBundle\Controller;
 
 use Symfony\Bundle\FrameworkBundle\Controller\Controller;
