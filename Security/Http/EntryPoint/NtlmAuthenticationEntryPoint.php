@@ -263,7 +263,6 @@ class NtlmAuthenticationEntryPoint implements AuthenticationEntryPointInterface
                             return;
                         }
 
-                        //$auth = Ntlm::verify_authenticate_msg($session->get('_ntlm_server_challenge'), $data, $ntlm_verify_hash_callback);
                         $auth = array(
                             'challenge' => new ChallengeData($session->get('_ntlm_server_challenge'), $targetName, $domain, $server, $dnsDomain, $dnsServer),
                             'response' => $responseData
