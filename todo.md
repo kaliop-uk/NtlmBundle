@@ -2,6 +2,7 @@ Roughly in order of importance:
 
 - finish the tokenValidator based on the ntlm_auth helper
     - change the API if needed: allow TokenValidator to generate the challenge
+      saee: http://comments.gmane.org/gmane.network.samba.general/157419
 
 - test:
     - set up a path validated via ntlm + required user role => is the user redirected to form login ?
@@ -12,8 +13,8 @@ Roughly in order of importance:
     - does the logout listener work?
     - is it possible to force the browser to forget the NTLM credentials, upon logout?
     - is it correct to keep the firewall listener at 'remember me' position instead of 'http' ?
-    
-- integration with ez:
+
+- integration with ez (customer's project):
     - miss the code/config to import a user via ldap if a new sso user is presented 
 
 - what to return in ntlmToken->getCredentials ?
@@ -25,7 +26,8 @@ Roughly in order of importance:
 
 - set up 2 extra token validators based on smb binary helper and local db
 
-- code refactoring: 
+- code refactoring:
+    - rename the bundle to be in Kaliop namespace instead of BrowserCreative?
     - use a ResponseData class instead of an Array
     - make the Lib class use non-static methods
     - refactor classes which have 'protocol' in the name => remove it
@@ -36,7 +38,7 @@ Roughly in order of importance:
     - IE intranet zone: ok for chrome, ie, edge
     - about:config for FF (but could not make it work so far)
 
-- check dead code and remove it if needed:
+- check dead code and remove it if not used:
     * form login
     * custom triggering of login event ?
     * remember_me

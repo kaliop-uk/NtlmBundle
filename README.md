@@ -65,7 +65,11 @@ Installation
             
             ...
 
-4. Set up the token validator used in the security.yml definition: ...
+4. Set up the token validator used in the security.yml definition:
+
+    ... to be documented ...
+
+    for the moment, you can go for 'ntlm.security.authentication.token_validator.smbhelper', but the class is unfinished 
 
 5. Optional: set the following 2 parameters:
 
