@@ -16,6 +16,7 @@ class SmbHelperTokenValidator implements TokenValidatorInterface
      * @return bool
      *
      * @todo use the ntlm_auth helper from samba, in mode 'squid-2.5-ntlmssp'...
+     * @see https://www.samba.org/samba/docs/man/manpages/ntlm_auth.1.html http://devel.squid-cache.org/ntlm/squid_helper_protocol.html
      */
     public function validate(ChallengeData $challenge, array $response)
     {
